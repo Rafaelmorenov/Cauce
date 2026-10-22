@@ -1,0 +1,23 @@
+{
+  "name": "@comercial/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@comercial/contracts": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.8.1",
+    "eslint": "^9.38.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

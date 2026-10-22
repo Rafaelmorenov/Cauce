@@ -1,0 +1,29 @@
+{
+  "name": "@comercial/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.916.0",
+    "@comercial/contracts": "*",
+    "@comercial/db": "*",
+    "@comercial/domain": "*",
+    "drizzle-orm": "^0.44.7",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.8.1",
+    "eslint": "^9.38.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

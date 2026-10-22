@@ -1,0 +1,31 @@
+{
+  "name": "comercial-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma multiempresa de prospección y ventas B2B",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build:packages": "npm run build --workspace @comercial/contracts && npm run build --workspace @comercial/domain && npm run build --workspace @comercial/db",
+    "build": "npm run build:packages && npm run build --workspace @comercial/api && npm run build --workspace @comercial/worker && npm run build --workspace @comercial/web",
+    "dev": "npm run dev --workspace @comercial/web",
+    "dev:api": "npm run dev --workspace @comercial/api",
+    "auth:microsoft": "npx tsx scripts/microsoft-auth.ts",
+    "smoke:microsoft": "npx tsx scripts/microsoft-smoke.ts",
+    "smoke:google": "npx tsx scripts/google-smoke.ts",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run build:packages && npm run test --workspaces --if-present",
+    "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.38.0",
+    "eslint": "^9.38.0",
+    "typescript-eslint": "^8.46.2"
+  }
+}
