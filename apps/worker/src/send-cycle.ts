@@ -10,6 +10,9 @@ export interface DueSend {
   campaignActive: boolean;
   testApproved: boolean;
   timeZone: string;
+  workdayStartHour?: number;
+  workdayEndHour?: number;
+  allowedWeekdays?: number[];
   sentToday: number;
   dailyLimit: number;
   suppressed: boolean;
@@ -47,8 +50,9 @@ export async function runSendCycle(input: {
       testApproved: send.testApproved,
       now: input.now,
       timeZone: send.timeZone,
-      workdayStartHour: 8,
-      workdayEndHour: 18,
+      workdayStartHour: send.workdayStartHour ?? 8,
+      workdayEndHour: send.workdayEndHour ?? 18,
+      ...(send.allowedWeekdays ? { allowedWeekdays: send.allowedWeekdays } : {}),
       sentToday: send.sentToday,
       dailyLimit: send.dailyLimit,
       suppressed: send.suppressed,

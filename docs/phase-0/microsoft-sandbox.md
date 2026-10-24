@@ -39,9 +39,9 @@ nuevo registro:
 - Tipos de cuenta: solo este directorio organizativo.
 - URI de redirección: dejarlo vacío por ahora.
 
-Después, en Autenticación:
-
-- Permitir flujos de cliente público: Sí.
+Después, en Autenticación, agrega la plataforma Aplicaciones móviles y de
+escritorio con la URI `http://localhost:8400`. Security Defaults bloquea el
+código de dispositivo, así que el sandbox usa Authorization Code con PKCE.
 
 En Permisos de API, agregar permisos delegados de Microsoft Graph:
 
@@ -51,11 +51,11 @@ En Permisos de API, agregar permisos delegados de Microsoft Graph:
 - `Mail.Read`
 - `Calendars.Read`
 
-Conceder consentimiento de administrador para el tenant.
+Conceder consentimiento de administrador para el tenant. Santiago lo concedió
+el 22 de octubre de 2026. El detalle vive en `docs/phase-0/bitacora.md`.
 
-En Certificados y secretos, crear un secreto de cliente. Se usa en el despliegue
-web; el flujo de código de dispositivo del sandbox usa el identificador de la
-aplicación.
+En Certificados y secretos, crear un secreto de cliente para el despliegue web.
+La autorización local con PKCE no lo utiliza.
 
 ## 3. Configuración local
 
@@ -73,8 +73,8 @@ No escribas estos valores en el chat. Luego ejecuta:
 npm run auth:microsoft
 ```
 
-Abre la dirección indicada, introduce el código y acepta los permisos. El
-script guarda el refresh token en `.env`.
+El script abre el navegador. Inicia sesión, acepta los permisos y vuelve a la
+terminal. El script guarda el refresh token en `.env`.
 
 ## 4. Prueba
 

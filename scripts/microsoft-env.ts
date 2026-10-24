@@ -49,5 +49,6 @@ export async function microsoftJson<T>(url: string, init: RequestInit): Promise<
     const detail = (await response.text()).replace(/access_token|refresh_token|client_secret/gi, "[redacted]").slice(0, 500);
     throw new Error(`${response.status} ${response.statusText}: ${detail}`);
   }
-  return response.status === 204 ? (undefined as T) : await response.json() as T;
+  if (response.status === 202 || response.status === 204) return undefined as T;
+  return await response.json() as T;
 }

@@ -73,7 +73,7 @@ h1 { font-size: 42px; line-height: 1; margin-bottom: 8px; }
 .panel-head { padding: 20px 22px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
 .panel-head h2 { margin: 0; font-size: 24px; }
 .panel-head small { color: var(--ink-soft); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
-.chat { min-height: 390px; padding: 25px; display: flex; flex-direction: column; gap: 16px; }
+.chat { min-height: 390px; max-height: 520px; overflow: auto; padding: 25px; display: flex; flex-direction: column; gap: 16px; }
 .bubble { max-width: 76%; padding: 13px 15px; border-radius: 12px; line-height: 1.55; font-size: 13px; }
 .bubble.system { background: var(--paper); border: 1px solid var(--line); }
 .bubble.user { align-self: flex-end; color: #fff; background: var(--ink); }
@@ -95,10 +95,46 @@ h1 { font-size: 42px; line-height: 1; margin-bottom: 8px; }
 .approval button { width: 100%; margin-top: 12px; padding: 10px; }
 .error { color: #9a3e35; font-size: 11px; padding: 0 18px 12px; }
 
+.template-studio { margin-top: 18px; }
+.template-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 22px; padding: 18px 22px 22px; }
+.template-form { display: grid; gap: 12px; align-content: start; }
+.template-form label { display: grid; gap: 6px; color: var(--ink-soft); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.template-form input, .template-form select, .template-form textarea { border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px; background: #fff; color: var(--ink); font: inherit; letter-spacing: 0; text-transform: none; }
+.template-form textarea { min-height: 78px; resize: vertical; }
+.template-body { min-height: 180px; }
+.template-form label.wide { grid-column: 1 / -1; }
+.template-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.template-note { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.5; }
+.template-preview { border: 1px solid var(--line); border-radius: 10px; background: var(--paper); padding: 14px; }
+.template-preview strong { display: block; margin-bottom: 8px; }
+.template-preview p { margin: 0; white-space: pre-wrap; font-size: 13px; line-height: 1.55; }
+
+.contact-base, .campaign-panel { margin-top: 18px; }
+.campaign-form { grid-template-columns: 1.4fr 1.6fr .6fr; }
+.schedule-block { grid-column: 1 / -1; display: grid; gap: 10px; }
+.schedule-days { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; border: 0; }
+.schedule-days legend { width: 100%; color: var(--ink-soft); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.day-option { display: flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 99px; padding: 6px 10px; color: var(--ink); font-size: 12px; letter-spacing: 0; text-transform: none; }
+.schedule-hours { display: flex; gap: 12px; }
+.schedule-hours label { min-width: 120px; }
+.contact-body { display: grid; gap: 14px; padding: 18px 22px 22px; }
+.column-map { display: grid; gap: 12px; }
+.column-map-form { grid-template-columns: repeat(3, 1fr); }
+.contact-fields { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.contact-fields li { display: flex; gap: 8px; align-items: baseline; border: 1px solid var(--line); border-radius: 99px; padding: 6px 10px; background: var(--paper); }
+.contact-fields strong { font-size: 12px; }
+.contact-fields span { color: var(--ink-soft); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.file-button { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); padding: 10px 14px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.file-button input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.contact-errors { margin: 0; padding-left: 18px; color: #9a3e35; font-size: 12px; }
+.contact-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.contact-table th, .contact-table td { text-align: left; padding: 8px 8px 8px 0; border-bottom: 1px solid var(--line); }
+.contact-table th { color: var(--ink-soft); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+
 @media (max-width: 1000px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar { display: none; }
   .main { padding: 25px 18px 50px; }
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
-  .workspace { grid-template-columns: 1fr; }
+  .workspace, .template-grid, .campaign-form, .column-map-form { grid-template-columns: 1fr; }
 }

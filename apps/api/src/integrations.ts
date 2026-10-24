@@ -2,17 +2,20 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import type {
   CalendarMeeting,
+  ConversationMessage,
+  Deal,
   MailMessage,
   ProspectCriteria,
   SentMessage,
+  TemplateProposalRequest,
 } from "@comercial/contracts";
+import { channelToneSkill } from "@comercial/domain";
 import type {
   CalendarConnector,
   CrmConnector,
   DataProvider,
   MailboxConnector,
 } from "@comercial/domain";
-import { ProspectCriteriaSchema, type Deal } from "@comercial/contracts";
 
 async function providerFetch<T>(
   url: string,
@@ -25,7 +28,14 @@ async function providerFetch<T>(
     const detail = (await response.text()).slice(0, 1_000);
     throw new ProviderError(provider, response.status, detail, retryAfter);
   }
-  return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+  if (response.status === 202 || response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+export class MailboxError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
 }
 
 export class ProviderError extends Error {
@@ -303,6 +313,76 @@ export class Microsoft365Connector extends OAuthConnector implements MailboxConn
   }
 }
 
+export const trialRecipient = "santiago.moreno@jumpcube.io";
+const trialMailbox = "santiago.moreno@hcsoftware.ai";
+
+export interface TrialMailbox {
+  findSentTest(subject: string): Promise<{ sentAt: string } | null>;
+  send(message: { to: string; subject: string; html: string; templateId: string }): Promise<{ providerId: string }>;
+}
+
+export async function connectMicrosoftMailbox(tenantId: string): Promise<TrialMailbox> {
+  const directory = process.env.MICROSOFT_TENANT_ID?.trim();
+  const clientId = process.env.MICROSOFT_CLIENT_ID?.trim();
+  const refreshToken = process.env.MICROSOFT_REFRESH_TOKEN?.trim();
+  if (!directory || !clientId || !refreshToken) {
+    throw new MailboxError("El buzón de Microsoft no está conectado.", 503);
+  }
+  const token = await providerFetch<{ access_token: string }>(
+    `https://login.microsoftonline.com/${directory}/oauth2/v2.0/token`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        scope: "openid profile email offline_access User.Read Mail.Send Mail.Read",
+      }),
+    },
+    "microsoft",
+  );
+  const profile = await providerFetch<{ mail?: string; userPrincipalName?: string }>(
+    "https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName",
+    { headers: { authorization: `Bearer ${token.access_token}` } },
+    "microsoft",
+  );
+  const mailbox = (profile.mail ?? profile.userPrincipalName ?? "").toLowerCase();
+  if (mailbox !== trialMailbox) {
+    throw new MailboxError("El buzón conectado no es el de la prueba.", 409);
+  }
+  const connector = new Microsoft365Connector(token.access_token);
+  return {
+    async findSentTest(subject: string) {
+      const data = await providerFetch<{
+        value?: Array<{
+          subject?: string;
+          sentDateTime?: string;
+          toRecipients?: Array<{ emailAddress?: { address?: string } }>;
+          internetMessageHeaders?: Array<{ name?: string; value?: string }>;
+        }>;
+      }>(
+        "https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages?$top=25&$select=subject,sentDateTime,toRecipients,internetMessageHeaders&$orderby=sentDateTime desc",
+        { headers: { authorization: `Bearer ${token.access_token}` } },
+        "microsoft",
+      );
+      const match = (data.value ?? []).find((message) => {
+        const addressed = (message.toRecipients ?? []).some((item) =>
+          item.emailAddress?.address?.toLowerCase() === trialRecipient);
+        return addressed && message.subject === subject;
+      });
+      return match ? { sentAt: match.sentDateTime ?? new Date().toISOString() } : null;
+    },
+    send(message) {
+      return connector.send({
+        to: message.to,
+        subject: message.subject,
+        html: message.html,
+      }, `cauce-test:${tenantId}:${trialRecipient}:${message.templateId}`);
+    },
+  };
+}
+
 export class SqsJobPublisher {
   private readonly client: SQSClient;
 
@@ -321,38 +401,210 @@ export class SqsJobPublisher {
   }
 }
 
-export class AnthropicAssistant {
+const audienceInstructions = [
+  "Eres el asistente de prospección de Cauce. Hablas español, con tono profesional y breve.",
+  "Solo ayudas a definir una audiencia B2B. No buscas contactos, no prometes resultados y no ejecutas acciones de pago.",
+  "Llama siempre la función registrar_audiencia.",
+  "Antes de ready=true necesitas país, tamaño de empresa, al menos un cargo, un sector o empresas de ejemplo, y la cantidad máxima de contactos.",
+  "Si falta alguno, ready=false, omite criteria y missing usa solo: pais, tamano, cargos, sector, cantidad.",
+  "Pregunta como máximo dos datos por turno. No inventes el país ni la cantidad.",
+  "Si nombran empresas de ejemplo, deduce el sector, explícalo en reply y guárdalas en includedCompanies.",
+  "employeeRanges usa tramos como 1-10, 11-50, 51-200, 201-500, 501-1000, 1001-5000 o 5001+.",
+  "seniorities, si aplica, usa owner, founder, c_suite, vp, director, manager, senior o entry.",
+  "contactLimit es el entero que pidió el usuario, entre 1 y 5000.",
+].join(" ");
+
+const audienceParameters = {
+  type: "object",
+  required: ["reply", "ready", "missing"],
+  properties: {
+    reply: { type: "string", description: "Respuesta breve en español para el usuario." },
+    ready: { type: "boolean", description: "True solo cuando la audiencia está completa." },
+    missing: {
+      type: "array",
+      items: { type: "string", enum: ["pais", "tamano", "cargos", "sector", "cantidad"] },
+    },
+    criteria: {
+      type: "object",
+      description: "Inclúyelo solo cuando ready es true.",
+      required: ["countries", "employeeRanges", "jobTitles", "contactLimit"],
+      properties: {
+        countries: { type: "array", items: { type: "string" } },
+        employeeRanges: { type: "array", items: { type: "string" } },
+        jobTitles: { type: "array", items: { type: "string" } },
+        seniorities: { type: "array", items: { type: "string" } },
+        industries: { type: "array", items: { type: "string" } },
+        keywords: { type: "array", items: { type: "string" } },
+        includedCompanies: { type: "array", items: { type: "string" } },
+        excludedCompanies: { type: "array", items: { type: "string" } },
+        contactLimit: { type: "integer" },
+      },
+    },
+  },
+};
+
+export class GeminiAssistant {
   constructor(
     private readonly apiKey: string,
-    private readonly model = "claude-sonnet-4-5",
+    private readonly model = "gemini-3.5-flash-lite",
   ) {}
 
-  async extractProspectCriteria(conversation: string): Promise<ProspectCriteria> {
-    const data = await providerFetch<{
-      content: Array<{ type: string; text?: string }>;
-    }>("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": this.apiKey,
-        "anthropic-version": "2023-06-01",
+  async interpret(messages: ConversationMessage[]): Promise<unknown> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.request(messages);
+      } catch (error) {
+        lastError = error;
+        const retryable = error instanceof ProviderError && (error.status === 503 || error.status === 429);
+        if (!retryable || attempt === 2) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 1_200 * (attempt + 1)));
+      }
+    }
+    throw lastError;
+  }
+
+  private async request(messages: ConversationMessage[]): Promise<unknown> {
+    const thinkingConfig = this.model.startsWith("gemini-2.5")
+      ? { thinkingBudget: 0 }
+      : { thinkingLevel: "low" };
+    let data: {
+      candidates?: Array<{
+        content?: { parts?: Array<{ functionCall?: { name?: string; args?: unknown } }> };
+      }>;
+    };
+    try {
+      data = await providerFetch<{
+        candidates?: Array<{
+          content?: { parts?: Array<{ functionCall?: { name?: string; args?: unknown } }> };
+        }>;
+      }>(
+        `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`,
+        {
+          method: "POST",
+          signal: AbortSignal.timeout(20_000),
+          headers: {
+            "content-type": "application/json",
+            "x-goog-api-key": this.apiKey,
+          },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: audienceInstructions }] },
+            contents: messages.map((message) => ({
+              role: message.role === "assistant" ? "model" : "user",
+              parts: [{ text: message.content }],
+            })),
+            tools: [{
+              functionDeclarations: [{
+                name: "registrar_audiencia",
+                description: "Registra la respuesta al usuario y los criterios solo cuando la audiencia está completa.",
+                parameters: audienceParameters,
+              }],
+            }],
+            toolConfig: {
+              functionCallingConfig: {
+                mode: "ANY",
+                allowedFunctionNames: ["registrar_audiencia"],
+              },
+            },
+            generationConfig: {
+              maxOutputTokens: 1_500,
+              thinkingConfig,
+            },
+          }),
+        },
+        "gemini",
+      );
+    } catch (error) {
+      if (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError")) {
+        throw new ProviderError("gemini", 504, "timeout", null);
+      }
+      throw error;
+    }
+    const call = data.candidates?.[0]?.content?.parts?.find(
+      (part) => part.functionCall?.name === "registrar_audiencia",
+    )?.functionCall;
+    if (!call?.args) throw new Error("Gemini no devolvió la audiencia");
+    return call.args;
+  }
+
+  async proposeTemplate(request: TemplateProposalRequest): Promise<unknown> {
+    const audience = request.audience ? ` Audiencia: ${request.audience}` : "";
+    const data = await this.generate<{
+      candidates?: Array<{
+        content?: { parts?: Array<{ functionCall?: { name?: string; args?: unknown } }> };
+      }>;
+    }>({
+      system: [
+        "Eres el redactor de plantillas de Cauce.",
+        channelToneSkill,
+        `Canal obligatorio: ${request.channel}. Tono obligatorio: ${request.tone}.`,
+        "Llama siempre proponer_plantilla. No cambies el canal ni el tono.",
+        "No envíes el mensaje ni busques contactos.",
+      ].join(" "),
+      tool: {
+        name: "proponer_plantilla",
+        description: "Entrega la plantilla propuesta para revisión humana.",
+        parameters: {
+          type: "object",
+          required: ["name", "subject", "body", "note"],
+          properties: {
+            name: { type: "string" },
+            subject: { type: "string" },
+            body: { type: "string" },
+            note: { type: "string", description: "Por qué este texto corresponde al canal y al tono." },
+          },
+        },
       },
-      body: JSON.stringify({
-        model: this.model,
-        max_tokens: 1_500,
-        system: [
-          "Eres un asistente de prospección B2B en español.",
-          "Devuelve solamente JSON válido con countries, employeeRanges, jobTitles,",
-          "seniorities, industries, keywords, includedCompanies, excludedCompanies y contactLimit.",
-          "No ejecutes búsquedas ni acciones con costo.",
-        ].join(" "),
-        messages: [{ role: "user", content: conversation }],
-      }),
-    }, "anthropic");
-    const text = data.content.find((item) => item.type === "text")?.text;
-    if (!text) throw new Error("Anthropic no devolvió criterios");
-    const json = text.replace(/^```json\s*|\s*```$/g, "");
-    return ProspectCriteriaSchema.parse(JSON.parse(json));
+      userText: `${request.brief}${audience}`,
+    });
+    const call = data.candidates?.[0]?.content?.parts?.find(
+      (part) => part.functionCall?.name === "proponer_plantilla",
+    )?.functionCall;
+    if (!call?.args) throw new Error("Gemini no devolvió la plantilla");
+    return call.args;
+  }
+
+  private async generate<T>(input: {
+    system: string;
+    tool: { name: string; description: string; parameters: object };
+    userText: string;
+  }): Promise<T> {
+    try {
+      return await providerFetch<T>(
+        `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`,
+        {
+          method: "POST",
+          signal: AbortSignal.timeout(20_000),
+          headers: {
+            "content-type": "application/json",
+            "x-goog-api-key": this.apiKey,
+          },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: input.system }] },
+            contents: [{ role: "user", parts: [{ text: input.userText }] }],
+            tools: [{ functionDeclarations: [input.tool] }],
+            toolConfig: {
+              functionCallingConfig: {
+                mode: "ANY",
+                allowedFunctionNames: [input.tool.name],
+              },
+            },
+            generationConfig: {
+              maxOutputTokens: 1_500,
+              thinkingConfig: this.model.startsWith("gemini-2.5")
+                ? { thinkingBudget: 0 }
+                : { thinkingLevel: "low" },
+            },
+          }),
+        },
+        "gemini",
+      );
+    } catch (error) {
+      if (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError")) {
+        throw new ProviderError("gemini", 504, "timeout", null);
+      }
+      throw error;
+    }
   }
 }
 

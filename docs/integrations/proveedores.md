@@ -38,12 +38,18 @@ Para modo de aplicación empresarial se usa RBAC de Exchange limitado al buzón;
 nunca `Mail.Send` de aplicación con alcance global. Los límites de Exchange no
 son objetivos de campaña. Ante `429` o `503`, respetar `Retry-After`.
 
-## Anthropic
+## Gemini
 
-Tres tareas: criterios estructurados, variantes de plantilla y clasificación
-posterior a reglas. Todas las salidas se validan contra Zod. Baja confianza
-requiere revisión humana. No se envía la base completa ni se usan datos de
-Apollo para entrenar modelos.
+El chat de audiencia usa la API de Gemini, modelo `gemini-3.5-flash-lite` salvo que
+`GEMINI_MODEL` indique otro. `POST /v1/assistant/conversation` obliga la función
+`registrar_audiencia` y valida el turno con Zod. Si faltan país, tamaño, cargo,
+sector o cantidad, pregunta y no propone criterios. Esa llamada no busca
+contactos ni gasta créditos de Apollo. La plantilla usa la misma clave en
+`POST /v1/assistant/template` y la habilidad de tono por canal. Guardarla o
+aprobarla no envía correo; solo el canal correo puede aprobarse para la prueba. La clave vive en `GEMINI_API_KEY`. Una
+clave de otro proveedor no sirve en esa variable. En el nivel gratuito, Google
+puede usar los textos enviados para mejorar sus productos; no se escribe ahí
+una base de contactos. Cada empresa tiene un tope de turnos en el proceso.
 
 ## HubSpot
 

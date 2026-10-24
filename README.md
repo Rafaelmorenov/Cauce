@@ -7,7 +7,7 @@ reuniones, ventas atribuidas y ROI.
 
 La base implementa contratos de proveedores, reglas críticas de dominio, esquema
 PostgreSQL multiempresa, API NestJS, worker SQS y una aplicación Next.js. Las
-llamadas reales a Google, Microsoft, Apollo, Anthropic y HubSpot requieren las
+llamadas reales a Microsoft, Gemini, Apollo y HubSpot requieren las
 credenciales del entorno y pruebas en cuentas de sandbox.
 
 ## Inicio local

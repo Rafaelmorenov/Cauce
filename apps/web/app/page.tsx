@@ -1,4 +1,7 @@
+import { CampaignPanel } from "@/components/campaign-panel";
+import { ContactBase } from "@/components/contact-base";
 import { ProspectWorkspace } from "@/components/prospect-workspace";
+import { TemplateStudio } from "@/components/template-studio";
 
 const nav = [
   ["Resumen", true],
@@ -54,6 +57,9 @@ export default function Home() {
         </section>
 
         <ProspectWorkspace />
+        <TemplateStudio />
+        <ContactBase />
+        <CampaignPanel />
       </main>
     </div>
   );

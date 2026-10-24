@@ -14,7 +14,7 @@ describe("reglas del dominio", () => {
   it("no renderiza una plantilla con variables ausentes", () => {
     expect(() =>
       renderTemplate(
-        { name: "Inicial", subject: "Hola {{nombre}}", body: "Para {{empresa}}" },
+        { name: "Inicial", channel: "correo", tone: "consultivo", subject: "Hola {{nombre}}", body: "Para {{empresa}}" },
         { nombre: "Ana", empresa: "", cargo: "CEO", remitente: "Rafael" },
       ),
     ).toThrow("empresa");
@@ -44,6 +44,27 @@ describe("reglas del dominio", () => {
       alreadySent: false,
     });
     expect(result).toEqual({ allowed: false, reason: "contacto_suprimido" });
+  });
+
+  it("envía el sábado solo cuando ese día está elegido", () => {
+    const saturday = new Date("2026-10-24T15:00:00Z");
+    const base = {
+      campaignActive: true,
+      testApproved: true,
+      now: saturday,
+      timeZone: "America/Bogota",
+      workdayStartHour: 8,
+      workdayEndHour: 18,
+      sentToday: 0,
+      dailyLimit: 40,
+      suppressed: false,
+      replied: false,
+      controlGroup: false,
+      alreadySent: false,
+    };
+    expect(canSend(base).reason).toBe("fin_de_semana");
+    expect(canSend({ ...base, allowedWeekdays: [6] })).toEqual({ allowed: true });
+    expect(canSend({ ...base, allowedWeekdays: [6], now: new Date("2026-10-26T15:00:00Z") }).reason).toBe("dia_no_seleccionado");
   });
 
   it("clasifica rebotes con reglas sin IA", () => {

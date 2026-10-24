@@ -16,7 +16,7 @@ const baseSend: DueSend = {
   replied: false,
   controlGroup: false,
   alreadySent: false,
-  template: { name: "Inicial", subject: "Hola {{nombre}}", body: "Para {{empresa}}" },
+  template: { name: "Inicial", channel: "correo", tone: "consultivo", subject: "Hola {{nombre}}", body: "Para {{empresa}}" },
   variables: { nombre: "Ana", empresa: "Acme", cargo: "CEO", remitente: "Rafael" },
   unsubscribeUrl: "https://example.com/unsubscribe/token",
 };

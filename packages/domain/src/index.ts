@@ -109,6 +109,7 @@ export interface SendEligibility {
   timeZone: string;
   workdayStartHour: number;
   workdayEndHour: number;
+  allowedWeekdays?: number[];
   sentToday: number;
   dailyLimit: number;
   suppressed: boolean;
@@ -132,9 +133,14 @@ export function canSend(input: SendEligibility): { allowed: boolean; reason?: st
     hour: "2-digit",
     hour12: false,
   }).formatToParts(input.now);
-  const weekday = parts.find((part) => part.type === "weekday")?.value;
+  const weekday = parts.find((part) => part.type === "weekday")?.value ?? "";
   const hour = Number(parts.find((part) => part.type === "hour")?.value);
-  if (weekday === "Sat" || weekday === "Sun") return { allowed: false, reason: "fin_de_semana" };
+  const weekdayIndex: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const allowed = input.allowedWeekdays ?? [1, 2, 3, 4, 5];
+  if (!allowed.includes(weekdayIndex[weekday] ?? -1)) {
+    if (weekday === "Sat" || weekday === "Sun") return { allowed: false, reason: "fin_de_semana" };
+    return { allowed: false, reason: "dia_no_seleccionado" };
+  }
   if (hour < input.workdayStartHour || hour >= input.workdayEndHour) {
     return { allowed: false, reason: "fuera_de_horario" };
   }
@@ -239,3 +245,5 @@ export function matchMeetingToContact(
   }
   return null;
 }
+
+export { channelToneSkill, tonesForChannel } from "./channel-tone.js";

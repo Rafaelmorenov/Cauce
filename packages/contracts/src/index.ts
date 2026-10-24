@@ -22,6 +22,49 @@ export const ProspectCriteriaSchema = z.object({
 });
 export type ProspectCriteria = z.infer<typeof ProspectCriteriaSchema>;
 
+export const ConversationMessageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().trim().min(1).max(4_000),
+});
+export type ConversationMessage = z.infer<typeof ConversationMessageSchema>;
+
+export const ConversationRequestSchema = z.object({
+  messages: z.array(ConversationMessageSchema).min(1).max(24),
+}).refine((value) => value.messages.at(-1)?.role === "user", {
+  path: ["messages"],
+  message: "El último mensaje debe ser del usuario",
+});
+
+export const MissingAudienceFieldSchema = z.enum([
+  "pais",
+  "tamano",
+  "cargos",
+  "sector",
+  "cantidad",
+]);
+
+export const AssistantTurnSchema = z.object({
+  reply: z.string().trim().min(1).max(2_000),
+  ready: z.boolean(),
+  missing: z.array(MissingAudienceFieldSchema).max(5).default([]),
+  criteria: ProspectCriteriaSchema.nullable().default(null),
+});
+export type AssistantTurn = z.infer<typeof AssistantTurnSchema>;
+
+export function parseAssistantTurn(input: unknown): AssistantTurn {
+  const turn = AssistantTurnSchema.parse(input);
+  if (turn.ready && !turn.criteria) {
+    throw new Error("Los criterios son obligatorios cuando la audiencia está lista");
+  }
+  if (!turn.ready && turn.criteria) {
+    throw new Error("No se proponen criterios hasta completar los datos");
+  }
+  if (turn.ready && turn.missing.length > 0) {
+    throw new Error("Una audiencia lista no puede tener datos pendientes");
+  }
+  return turn;
+}
+
 export const ProspectRequestStatusSchema = z.enum([
   "borrador",
   "en_revision",
@@ -45,15 +88,19 @@ export const ContactStatusSchema = z.enum([
 ]);
 export type ContactStatus = z.infer<typeof ContactStatusSchema>;
 
-export const ContactImportRowSchema = z.object({
-  firstName: z.string().trim().min(1),
-  lastName: z.string().trim().min(1),
-  email: z.string().trim().email().optional(),
-  title: z.string().trim().optional(),
-  organizationName: z.string().trim().min(1),
-  organizationDomain: z.string().trim().toLowerCase().optional(),
-});
-export type ContactImportRow = z.infer<typeof ContactImportRowSchema>;
+export {
+  ContactImportRowSchema,
+  contactImportFields,
+  contactImportTemplateCsv,
+  demoContacts,
+  inspectContactCsv,
+  parseContactCsv,
+  parseMappedContactCsv,
+  type ContactColumnMapping,
+  type ContactCsvError,
+  type ContactFieldKey,
+  type ContactImportRow,
+} from "./contact-csv.js";
 
 export const TemplateVariableSchema = z.enum([
   "nombre",
@@ -62,12 +109,52 @@ export const TemplateVariableSchema = z.enum([
   "remitente",
 ]);
 
+export const TemplateChannelSchema = z.enum(["correo", "linkedin", "whatsapp"]);
+export type TemplateChannel = z.infer<typeof TemplateChannelSchema>;
+
+export const TemplateToneSchema = z.enum(["directo", "consultivo", "formal", "cercano"]);
+export type TemplateTone = z.infer<typeof TemplateToneSchema>;
+
+const tonesByChannel: Record<TemplateChannel, readonly TemplateTone[]> = {
+  correo: ["directo", "consultivo", "formal"],
+  linkedin: ["cercano", "consultivo"],
+  whatsapp: ["cercano", "directo"],
+};
+
 export const TemplateDraftSchema = z.object({
   name: z.string().trim().min(2).max(120),
-  subject: z.string().trim().min(1).max(180),
-  body: z.string().trim().min(1).max(20_000),
+  channel: TemplateChannelSchema.default("correo"),
+  tone: TemplateToneSchema.default("consultivo"),
+  subject: z.string().trim().max(180).default(""),
+  body: z.string().trim().min(1).max(4_000),
+}).refine((value) => tonesByChannel[value.channel].includes(value.tone), {
+  path: ["tone"],
+  message: "Ese tono no corresponde al canal",
+}).refine((value) => value.channel !== "correo" || (value.subject.length > 0 && value.subject.length <= 90), {
+  path: ["subject"],
+  message: "El correo necesita un asunto de hasta 90 caracteres",
+}).refine((value) => value.channel === "correo" || value.subject.length === 0, {
+  path: ["subject"],
+  message: "Ese canal no usa asunto",
+}).refine((value) => value.channel !== "correo" || (value.body.includes("{{nombre}}") && value.body.includes("{{empresa}}")), {
+  path: ["body"],
+  message: "El correo debe incluir {{nombre}} y {{empresa}}",
+}).refine((value) => value.channel === "correo" || value.body.length <= 500, {
+  path: ["body"],
+  message: "Ese canal admite hasta 500 caracteres",
 });
 export type TemplateDraft = z.infer<typeof TemplateDraftSchema>;
+
+export const TemplateProposalRequestSchema = z.object({
+  channel: TemplateChannelSchema,
+  tone: TemplateToneSchema,
+  brief: z.string().trim().min(8).max(2_000),
+  audience: z.string().trim().max(1_000).optional(),
+}).refine((value) => tonesByChannel[value.channel].includes(value.tone), {
+  path: ["tone"],
+  message: "Ese tono no corresponde al canal",
+});
+export type TemplateProposalRequest = z.infer<typeof TemplateProposalRequestSchema>;
 
 export const CampaignStatusSchema = z.enum([
   "borrador",
